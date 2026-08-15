@@ -25,13 +25,12 @@
 .bottom{position:fixed;left:0;right:0;bottom:0;background:var(--navy);color:#fff}.bottom-inner{max-width:620px;margin:auto;display:grid;grid-template-columns:repeat(3,1fr);padding:7px 8px max(7px,env(safe-area-inset-bottom))}.nav{border:0;background:none;color:#fff;opacity:.72;padding:7px;font-size:11px}.nav.active{opacity:1;font-weight:900}.nav span{display:block;font-size:20px;margin-bottom:2px}
 .update-banner{position:fixed;z-index:99;left:50%;transform:translateX(-50%);bottom:82px;width:min(570px,calc(100% - 24px));background:#092f62;color:#fff;border-radius:12px;padding:12px 14px;box-shadow:0 8px 30px rgba(0,0,0,.2);display:flex;align-items:center;gap:12px}.update-banner div{flex:1;font-size:12px}.update-banner button{border:0;background:#fff;color:#092f62;border-radius:8px;padding:9px 11px;font-weight:900}
 
-/* V5 refinements */
-.admin-tools{margin:16px 18px;display:grid;gap:11px}
-.admin-tools .menu-card{border-color:#e8c977;background:linear-gradient(135deg,#fffaf0,#fff)}
-.pill{height:auto;align-self:flex-start;display:inline-flex;align-items:center;justify-content:center;min-width:74px}
+/* V6 clean rebuild */
+.admin-tools{margin:16px 18px;display:grid;gap:11px;padding:14px;border:1px solid #e8c977;border-radius:14px;background:linear-gradient(135deg,#fffaf0,#fff)}
+.admin-tools .menu-card{box-shadow:none;border-color:#ead69f}
 .task-top{align-items:flex-start}
-.task-title,.task-meta{padding-right:4px}
-.search-result .task-actions .primary{display:none}
-.note-box{margin-top:12px;padding:11px 13px;background:#fff8e8;border:1px solid #efddb3;border-radius:9px;color:#6d511b;font-size:12px;line-height:1.45}
-.search-hit{border:1px solid var(--line);border-radius:12px;padding:13px;margin-top:12px;background:#fff}
-.search-hit button{margin-top:12px}
+.task-card .pill{display:inline-flex!important;align-items:center!important;justify-content:center!important;width:auto!important;height:auto!important;min-width:72px!important;max-width:90px!important;min-height:0!important;padding:5px 9px!important;border-radius:999px!important;line-height:1.15!important;flex:0 0 auto!important;white-space:nowrap!important}
+.note-box{margin-top:11px;padding:10px 12px;background:#fff8e8;border:1px solid #efddb3;border-radius:9px;color:#6d511b;font-size:12px;line-height:1.45}
+.search-hit{border:1px solid var(--line);border-radius:12px;padding:13px;margin-top:10px;background:#fff}
+.search-hit strong{font-size:14px}.search-hit button{margin-top:10px;width:100%}
+.view-only .task-actions{display:block}.view-only .task-actions button{width:100%}
