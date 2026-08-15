@@ -1,5 +1,5 @@
 
-const CACHE='biomedical-v4-20260814';
+const CACHE='biomedical-v5-20260814';
 const FILES=['./','./index.html','./styles.css','./db.js','./app.js','./manifest.json','./biomedical-logo-original.png','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES))));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
