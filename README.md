@@ -1,41 +1,21 @@
-# Biomedical — V6 Clean Demo
+# Biomedical — V7 BASE APROBADA
 
-Rebuild limpio desde la V4 visual.
+Esta versión se guarda como base funcional antes de la integración real con Google Sheets.
 
-## Sol Demo
-Sol Demo / 2468 es Super Admin.
+## Lógica cerrada
+- Asignado a mí / Nuevo registro: entregas pendientes que el usuario debe ejecutar.
+- Mis entregas: historial de entregas efectivamente realizadas por el usuario, aunque originalmente hayan estado asignadas a otra persona.
+- Encontrar registro: consulta global para Super Admin.
+- Se conserva por separado quién estaba originalmente asignado y quién realizó la entrega.
+- Una entrega finalizada queda bloqueada por ahora.
+- Desde Mis entregas sólo se permite agregar o editar la Nota.
 
-Dentro de Control de Entrega de Materiales, las dos herramientas exclusivas se muestran juntas en un bloque amarillo, sin texto “Super Admin”:
-- Gestionar entrega de otro usuario
-- Encontrar registro
+## Super Admin demo
+Sol Demo / 2468
 
-## Encontrar registro
-Sólo consulta.
-- Busca por remito, sanatorio, material, médico o paciente.
-- Filtros por estado y usuario.
-- Sólo muestra “Ver detalle”; no permite cambiar estados.
-- Al volver del detalle regresa a la búsqueda y conserva el texto/filtros/resultados.
+## Operadores demo
+Diego Demo / 1357
+Jorge Demo / 9876
 
-## Gestionar entrega de otro usuario
-- Busca por número de remito o paciente.
-- Devuelve coincidencias pendientes asignadas a otros usuarios.
-- Al seleccionar una entrega, muestra todos sus datos y sí permite avanzar el flujo.
-
-## Entrega
-Datos precargados:
-- remito
-- material
-- sanatorio
-- paciente
-- médico
-
-Al completar:
-- Recibido por
-- Sector
-- Nota opcional
-- Foto obligatoria del remito
-
-Las notas también pueden venir precargadas y son visibles en la consulta general.
-
-## Datos demo
-V6 usa una clave nueva `recordsV6`, para no reutilizar los registros guardados por versiones anteriores.
+## Importante
+Esta V7 BASE todavía utiliza datos demo/locales. La integración App ↔ Apps Script ↔ Google Sheets se desarrollará a partir de esta base sin reemplazar este ZIP guardado.

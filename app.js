@@ -25,8 +25,8 @@ const stateName=s=>s==='assigned'?'Asignado':s==='out'?'Retirado':'Entregado';
 async function init(){
  USERS.forEach(u=>{const o=document.createElement('option');o.value=u.id;o.textContent=u.name;$('user').appendChild(o)});
  session=await idbGet(STORES.kv,'session');
- records=await idbGet(STORES.kv,'recordsV6');
- if(!records){records=structuredClone(DEMO_V6);await idbSet(STORES.kv,'recordsV6',records)}
+ records=await idbGet(STORES.kv,'recordsV7real')||await idbGet(STORES.kv,'recordsV7');
+ if(!records){records=structuredClone(DEMO_V6);await idbSet(STORES.kv,'recordsV7',records)}
  lastSync=await idbGet(STORES.kv,'lastSync');
 
  $('activate').onclick=activate;$('sync').onclick=sync;$('logout').onclick=logout;
@@ -60,13 +60,45 @@ function route(){
  else{$('activation').classList.remove('hidden');$('shell').classList.add('hidden')}
 }
 async function activate(){
- const u=USERS.find(x=>x.id===$('user').value&&x.code===$('code').value.trim());
- if(!u){$('err').className='error';$('err').textContent='Usuario o código incorrecto.';return}
- session={...u,deviceId:crypto.randomUUID?crypto.randomUUID():'dev-'+Date.now(),activatedAt:new Date().toISOString()};
- await idbSet(STORES.kv,'session',session);route();
+ const userId=$('user').value, code=$('code').value.trim();
+ try{
+  if(API.configured && navigator.onLine){
+   const device={id:crypto.randomUUID?crypto.randomUUID():'dev-'+Date.now(),platform:navigator.userAgent};
+   const res=await API.activate(userId,code,device);
+   session={userId:res.user.id,name:res.user.name,role:res.user.role,superAdmin:res.user.superAdmin,sectors:res.user.sectors||[],deviceId:device.id,activatedAt:new Date().toISOString()};
+  }else{
+   const u=USERS.find(x=>x.id===userId&&x.code===code);
+   if(!u) throw new Error('Usuario o código incorrecto.');
+   session={...u,userId:u.id,deviceId:crypto.randomUUID?crypto.randomUUID():'dev-'+Date.now(),activatedAt:new Date().toISOString()};
+  }
+  await idbSet(STORES.kv,'session',session);$('err').textContent='';route();await sync();
+ }catch(e){$('err').className='error';$('err').textContent=e.message==='API_NOT_CONFIGURED'?'API todavía no configurada.':e.message}
 }
 async function logout(){if(confirm('¿Desvincular este dispositivo?')){await idbSet(STORES.kv,'session',null);session=null;route()}}
-async function sync(){if(navigator.onLine){lastSync=new Date().toISOString();await idbSet(STORES.kv,'lastSync',lastSync)}status()}
+async function sync(){
+ if(!session||!navigator.onLine||!API.configured){status();return}
+ try{
+  await flushQueue();
+  const res=await API.deliveries(session.userId||session.id);
+  records=res.deliveries||[];
+  await idbSet(STORES.kv,'recordsV7real',records);
+  lastSync=new Date().toISOString();await idbSet(STORES.kv,'lastSync',lastSync);
+  renderAssigned();renderMyDeliveries();if($('records')?.classList.contains('active'))renderRecords();
+ }catch(e){console.warn('Sync:',e)}
+ status();
+}
+async function queueUpdate(id,patch){
+ let q=await idbGet(STORES.kv,'syncQueueV7')||[];q.push({id,patch,at:new Date().toISOString()});await idbSet(STORES.kv,'syncQueueV7',q);
+}
+async function flushQueue(){
+ let q=await idbGet(STORES.kv,'syncQueueV7')||[];if(!q.length)return;
+ const left=[];for(const item of q){try{await API.updateDelivery(session.userId||session.id,item.id,item.patch)}catch(e){left.push(item)}}
+ await idbSet(STORES.kv,'syncQueueV7',left);
+}
+async function remotePatch(id,patch){
+ if(API.configured&&navigator.onLine){try{await API.updateDelivery(session.userId||session.id,id,patch);return}catch(e){}}
+ await queueUpdate(id,patch);
+}
 function status(){
  if(!session)return;const on=navigator.onLine;
  $('conn').textContent=on?'Conectado':'Sin conexión';
@@ -108,8 +140,27 @@ function renderAssigned(){
  $('assignedList').innerHTML=a.length?a.map(r=>taskCard(r,{source:'assigned'})).join(''):'<div class="empty">No tenés entregas pendientes asignadas.</div>';
 }
 function renderMyDeliveries(){
- const a=records.filter(r=>r.assignedTo===session.userId);
- $('myDeliveriesList').innerHTML=a.length?a.map(r=>taskCard(r,{source:'myDeliveries'})).join(''):'<div class="empty">No hay entregas.</div>';
+ const a=records.filter(r=>r.state==='done'&&r.deliveredBy===session.name);
+ $('myDeliveriesList').innerHTML=a.length?a.map(r=>historyCard(r)).join(''):'<div class="empty">Todavía no tenés entregas realizadas.</div>';
+}
+function historyCard(r){
+ return `<div class="task-card">
+ <div class="task-top"><div><div class="task-title">${r.remito} · ${r.material}</div><div class="task-meta">${r.sanatorio}<br>${r.paciente} · ${r.medico}<br><strong>Entregado: ${fmt(r.deliveredAt)}</strong></div></div><span class="pill done">Entregado</span></div>
+ ${r.note?`<div class="note-box"><strong>Nota:</strong> ${r.note}</div>`:''}
+ <div class="task-actions"><button class="secondary" onclick="openDetail('${r.id}','myDeliveries',true)">Ver detalle</button><button class="primary" onclick="openNoteEditor('${r.id}')">${r.note?'Editar nota':'Agregar nota'}</button></div>
+ </div>`;
+}
+function openNoteEditor(id){
+ current=records.find(r=>r.id===id);
+ $('historyNote').value=current.note||'';
+ $('historyNoteContext').innerHTML=detail(current);
+ show('historyNoteScreen');
+}
+async function saveHistoryNote(){
+ if(!current)return;
+ current.note=$('historyNote').value.trim();
+ await save();await remotePatch(current.id,{note:current.note});
+ show('myDeliveries');
 }
 function openDetail(id,from='myDeliveries',viewOnly=false){
  current=records.find(r=>r.id===id);detailReturn=from;
@@ -118,7 +169,7 @@ function openDetail(id,from='myDeliveries',viewOnly=false){
 }
 async function markExit(id,from='myDeliveries'){
  const r=records.find(x=>x.id===id);if(!confirm(`¿Confirmar que retiraste el material del remito ${r.remito}?`))return;
- r.state='out';r.exitBy=session.name;r.exitAt=new Date().toISOString();await save();
+ r.state='out';r.exitBy=session.name;r.exitAt=new Date().toISOString();await save();await remotePatch(id,{state:'out'});
  openDetail(id,from,false);
 }
 function openDelivery(id,from='myDeliveries'){
@@ -130,9 +181,13 @@ function previewPhoto(e){const f=e.target.files[0];if(!f)return;const rd=new Fil
 async function confirmDelivery(){
  if(!current)return;const rec=$('receivedBy').value.trim(),sec=$('sector').value.trim(),f=$('remitoPhoto').files[0];
  if(!rec||!sec){alert('Completá Recibido por y Sector.');return}if(!f){alert('La foto del remito es obligatoria.');return}
- const rd=new FileReader();rd.onload=async()=>{current.state='done';current.receivedBy=rec;current.sector=sec;current.note=$('deliveryNote').value.trim();current.remitoPhoto=rd.result;current.deliveredBy=session.name;current.deliveredAt=new Date().toISOString();await save();alert('Entrega registrada.');show(detailReturn==='otherDelivery'?'materials':detailReturn)};rd.readAsDataURL(f);
+ const rd=new FileReader();rd.onload=async()=>{current.state='done';current.receivedBy=rec;current.sector=sec;current.note=$('deliveryNote').value.trim();current.remitoPhoto=rd.result;current.deliveredBy=session.name;current.deliveredAt=new Date().toISOString();await save();
+ let photoUrl='';
+ if(API.configured&&navigator.onLine){try{const up=await API.uploadRemito(session.userId||session.id,current.id,rd.result,f.name);photoUrl=up.url}catch(e){console.warn(e)}}
+ await remotePatch(current.id,{state:'done',receivedBy:rec,sector:sec,note:current.note,remitoPhoto:photoUrl});
+ alert(navigator.onLine?'Entrega registrada.':'Entrega guardada sin conexión. Se sincronizará cuando vuelva Internet.');show(detailReturn==='otherDelivery'?'materials':detailReturn)};rd.readAsDataURL(f);
 }
-async function save(){await idbSet(STORES.kv,'recordsV6',records);renderAssigned();renderMyDeliveries()}
+async function save(){await idbSet(STORES.kv,'recordsV7real',records);renderAssigned();renderMyDeliveries()}
 
 /* Admin: execute another user's delivery */
 function prepareOther(){
