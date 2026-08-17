@@ -34,3 +34,14 @@
 .search-hit{border:1px solid var(--line);border-radius:12px;padding:13px;margin-top:10px;background:#fff}
 .search-hit strong{font-size:14px}.search-hit button{margin-top:10px;width:100%}
 .view-only .task-actions{display:block}.view-only .task-actions button{width:100%}
+
+/* V8 — Cuidado de Heridas */
+.assigned-section-label{font-size:11px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:10px 2px 0}
+.patient-hero{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px}.patient-hero small{color:var(--muted);font-weight:800}.patient-hero h2{margin:3px 0 4px;font-size:24px}
+.pill.auth{max-width:118px!important;white-space:normal!important;text-align:center}.pill.auth.ok{background:var(--greenbg);color:var(--green)}.pill.auth.warn{background:var(--amberbg);color:var(--amber)}.pill.auth.danger{background:#fde7e7;color:var(--red)}
+.auth-line{margin-top:10px;border-radius:8px;padding:8px 10px;font-size:11px;font-weight:900}.auth-line.ok{background:var(--greenbg);color:var(--green)}.auth-line.warn{background:var(--amberbg);color:var(--amber)}.auth-line.danger{background:#fde7e7;color:var(--red)}
+.wound-actions{margin:14px 0 18px}.inner-title{margin:24px 0 10px}.no-margin{margin:0}
+.wound-chart{margin:16px 0;padding:14px;border:1px solid var(--line);border-radius:13px;background:#fbfcfe}.chart-title{font-size:13px;font-weight:900;margin-bottom:7px}.wound-chart svg{width:100%;height:auto;display:block}.axis{stroke:#c5d0dc;stroke-width:1}.trend{fill:none;stroke:#075493;stroke-width:4;stroke-linecap:round;stroke-linejoin:round}.point{fill:#fff;stroke:#075493;stroke-width:3}.chart-foot{display:flex;justify-content:space-between;color:var(--muted);font-size:10px}.chart-empty{font-size:12px;padding:10px}
+.visit-card .photo-links{display:flex;gap:8px;margin-top:10px}.visit-card .photo-links a{font-size:11px;font-weight:800;color:var(--navy);text-decoration:none;border:1px solid var(--line);padding:7px 9px;border-radius:7px}.pill.evolution.meJora,.pill.evolution.mejora{background:var(--greenbg);color:var(--green)}.pill.evolution.igual{background:var(--amberbg);color:var(--amber)}.pill.evolution.empeora{background:#fde7e7;color:var(--red)}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.compact-photo{padding:10px;min-height:70px}.compact-photo input{font-size:11px}.compact-photo .photo-preview{max-height:180px}
+@media(max-width:430px){.form-grid{grid-template-columns:1fr}.patient-hero{flex-direction:column}.pill.auth{max-width:none!important}}

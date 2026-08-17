@@ -15,5 +15,8 @@ const API = {
   deliveries(userId){ return this.call('listDeliveries',{userId}); },
   updateDelivery(userId,id,patch){ return this.call('updateDelivery',{userId,id,patch}); },
   search(userId,query,filters={}){ return this.call('searchDeliveries',{userId,query,filters}); },
-  uploadRemito(userId,id,dataUrl,fileName){ return this.call('uploadRemito',{userId,id,dataUrl,fileName}); }
+  uploadRemito(userId,id,dataUrl,fileName){ return this.call('uploadRemito',{userId,id,dataUrl,fileName}); },
+  woundPatients(userId){ return this.call('listWoundPatients',{userId}); },
+  woundHistory(userId,patientId){ return this.call('woundHistory',{userId,patientId}); },
+  createWoundVisit(userId,visit){ return this.call('createWoundVisit',{userId,visit}); }
 };

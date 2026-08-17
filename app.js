@@ -16,6 +16,7 @@ const DEMO_V6=[
 
 let session=null,records=[],current=null,lastSync=null;
 let detailReturn='myDeliveries';
+let woundPatients=[], woundVisitsByPatient={}, currentWoundPatient=null, woundPatientScope='mine';
 
 const $=id=>document.getElementById(id);
 const userName=id=>(USERS.find(u=>u.id===id)||{}).name||id;
@@ -28,11 +29,16 @@ async function init(){
  records=await idbGet(STORES.kv,'recordsV7real')||await idbGet(STORES.kv,'recordsV7');
  if(!records){records=structuredClone(DEMO_V6);await idbSet(STORES.kv,'recordsV7',records)}
  lastSync=await idbGet(STORES.kv,'lastSync');
+ woundPatients=await idbGet(STORES.kv,'woundPatientsV8')||[];
 
  $('activate').onclick=activate;$('sync').onclick=sync;$('logout').onclick=logout;
  $('confirmDelivery').onclick=confirmDelivery;$('remitoPhoto').onchange=previewPhoto;
  $('recordSearch').oninput=renderRecords;$('stateFilter').onchange=renderRecords;$('userFilter').onchange=renderRecords;
  $('otherSearch').oninput=renderOtherMatches;
+ $('woundPatientSearch').oninput=renderWoundPatients;
+ $('saveWoundVisit').onclick=saveWoundVisit;
+ $('wvPhotoBefore').onchange=e=>previewWoundPhoto(e,'wvBeforePreview');
+ $('wvPhotoAfter').onchange=e=>previewWoundPhoto(e,'wvAfterPreview');
  document.querySelectorAll('.nav').forEach(b=>b.onclick=()=>show(b.dataset.go));
  window.addEventListener('online',()=>{status();sync()});window.addEventListener('offline',status);
 
@@ -79,11 +85,13 @@ async function sync(){
  if(!session||!navigator.onLine||!API.configured){status();return}
  try{
   await flushQueue();
+  await flushWoundQueue();
   const res=await API.deliveries(session.userId||session.id);
   records=res.deliveries||[];
   await idbSet(STORES.kv,'recordsV7real',records);
   lastSync=new Date().toISOString();await idbSet(STORES.kv,'lastSync',lastSync);
   renderAssigned();renderMyDeliveries();if($('records')?.classList.contains('active'))renderRecords();
+  if(session.sectors.includes('heridas')||session.superAdmin){try{const wr=await API.woundPatients(session.userId||session.id);woundPatients=wr.patients||[];await idbSet(STORES.kv,'woundPatientsV8',woundPatients);renderAssigned();if($('woundPatients')?.classList.contains('active'))renderWoundPatients();}catch(e){console.warn('Wounds sync:',e)}}
  }catch(e){console.warn('Sync:',e)}
  status();
 }
@@ -109,7 +117,8 @@ function render(){
  $('hello').textContent=session.name.split(' ')[0];$('profileName').textContent=session.name;$('role').textContent=session.role;
  $('deviceId').textContent=session.deviceId.slice(0,10).toUpperCase();$('activatedAt').textContent=fmt(session.activatedAt);
  $('adminTools').classList.toggle('hidden',!session.superAdmin);
- $('modules').innerHTML=`<button class="module" onclick="show('materials')"><div class="module-icon">📦</div><div class="module-main"><strong>Control de Entrega de Materiales</strong><small>Seguimiento operativo</small></div><div class="arrow">›</div></button>`+(session.sectors.includes('heridas')?`<button class="module"><div class="module-icon green-icon">🩹</div><div class="module-main"><strong>Cuidado de Heridas</strong><small>Próximamente</small></div><div class="arrow">›</div></button>`:'');
+ $('modules').innerHTML=`<button class="module" onclick="show('materials')"><div class="module-icon">📦</div><div class="module-main"><strong>Control de Entrega de Materiales</strong><small>Seguimiento operativo</small></div><div class="arrow">›</div></button>`+((session.sectors.includes('heridas')||session.superAdmin)?`<button class="module" onclick="show('wounds')"><div class="module-icon green-icon">🩹</div><div class="module-main"><strong>Cuidado de Heridas</strong><small>Pacientes, visitas y evolución</small></div><div class="arrow">›</div></button>`:'');
+ $('woundAdminTools').classList.toggle('hidden',!session.superAdmin);
  renderAssigned();status();
 }
 function detail(r){
@@ -137,7 +146,11 @@ function taskCard(r,{showAssigned=false,source='myDeliveries',viewOnly=false}={}
 }
 function renderAssigned(){
  const a=records.filter(r=>r.assignedTo===session.userId&&r.state!=='done');
- $('assignedList').innerHTML=a.length?a.map(r=>taskCard(r,{source:'assigned'})).join(''):'<div class="empty">No tenés entregas pendientes asignadas.</div>';
+ const wp=(session.sectors.includes('heridas')||session.superAdmin)?woundPatients:[];
+ let html='';
+ if(a.length){html+=`<div class="assigned-section-label">Entrega de materiales</div>`+a.map(r=>taskCard(r,{source:'assigned'})).join('')}
+ if(wp.length){html+=`<div class="assigned-section-label">Cuidado de heridas</div>`+wp.map(p=>woundPatientCard(p,true)).join('')}
+ $('assignedList').innerHTML=html||'<div class="empty">No tenés pendientes asignados.</div>';
 }
 function renderMyDeliveries(){
  const a=records.filter(r=>r.state==='done'&&r.deliveredBy===session.name);
@@ -218,9 +231,66 @@ function renderRecords(){
  $('recordCount').textContent=`${a.length} registro(s)`;
  $('recordsList').innerHTML=a.length?a.map(r=>taskCard(r,{showAssigned:true,source:'records',viewOnly:true})).join(''):'<div class="empty">No encontramos registros con esos criterios.</div>';
 }
+
+
+// ==================== CUIDADO DE HERIDAS V8 ====================
+function authClass(s){s=(s||'').toUpperCase();return s.includes('REQUIERE')?'danger':s.includes('ÚLTIMA')?'warn':'ok'}
+function woundPatientCard(p,compact=false){
+ const remaining=Number.isFinite(Number(p.visitsRemaining))?p.visitsRemaining:'—';
+ return `<div class="task-card wound-patient-card"><div class="task-top"><div><div class="task-title">${p.name||p.id}</div><div class="task-meta">${p.id}<br>${p.woundType||'Tipo de herida sin cargar'}${p.doctor?` · ${p.doctor}`:''}</div></div><span class="pill auth ${authClass(p.authStatus)}">${remaining} restante${remaining===1?'':'s'}</span></div><div class="auth-line ${authClass(p.authStatus)}">${p.authStatus||'SIN DATOS DE AUTORIZACIÓN'}</div><div class="task-actions"><button class="secondary" onclick="openWoundPatient('${p.id}')">Ver paciente</button>${compact?'':`<button class="primary" onclick="openWoundPatient('${p.id}',true)">Registrar visita</button>`}</div></div>`;
+}
+function openMyWoundPatients(){woundPatientScope='mine';$('woundPatientsTitle').textContent='Mis pacientes';$('woundPatientSearch').value='';show('woundPatients')}
+function openAllWoundPatients(){if(!session.superAdmin)return;woundPatientScope='all';$('woundPatientsTitle').textContent='Todos los pacientes';$('woundPatientSearch').value='';show('woundPatients')}
+function renderWoundPatients(){
+ let a=woundPatients.slice();const q=($('woundPatientSearch').value||'').trim().toLowerCase();
+ if(q)a=a.filter(p=>[p.id,p.name,p.doctor,p.insurance,p.nurse].some(v=>String(v||'').toLowerCase().includes(q)));
+ $('woundPatientCount').textContent=`${a.length} paciente(s)`;
+ $('woundPatientList').innerHTML=a.length?a.map(p=>woundPatientCard(p)).join(''):'<div class="empty">No encontramos pacientes.</div>';
+}
+async function openWoundPatient(id,startVisit=false){
+ currentWoundPatient=woundPatients.find(p=>p.id===id);if(!currentWoundPatient)return;
+ show('woundPatientDetail');renderWoundPatientHeader();
+ let visits=woundVisitsByPatient[id]||await idbGet(STORES.kv,'woundVisits_'+id)||[];
+ if(API.configured&&navigator.onLine){try{const r=await API.woundHistory(session.userId||session.id,id);currentWoundPatient=r.patient||currentWoundPatient;visits=r.visits||[];woundVisitsByPatient[id]=visits;await idbSet(STORES.kv,'woundVisits_'+id,visits)}catch(e){console.warn(e)}}
+ renderWoundHistory(visits);if(startVisit)openNewWoundVisit();
+}
+function renderWoundPatientHeader(){
+ const p=currentWoundPatient;$('woundPatientBody').innerHTML=`<div class="patient-hero"><div><small>${p.id}</small><h2>${p.name}</h2><div class="muted">${p.woundType||'Tipo de herida sin cargar'}</div></div><span class="pill auth ${authClass(p.authStatus)}">${p.visitsRemaining??'—'} restantes</span></div><div class="detail-grid"><div class="detail-row"><small>Obra social</small><strong>${p.insurance||'—'}</strong></div><div class="detail-row"><small>Médico tratante</small><strong>${p.doctor||'—'}</strong></div><div class="detail-row"><small>Enfermero responsable</small><strong>${p.nurse||'—'}</strong></div><div class="detail-row"><small>Frecuencia</small><strong>${p.frequency||'—'}</strong></div><div class="detail-row"><small>Autorización</small><strong>${p.visitsDone||0} realizadas · ${p.authorized||0} autorizadas</strong><div class="auth-line ${authClass(p.authStatus)}">${p.authStatus||'SIN DATOS'}</div></div>${p.notes?`<div class="detail-row"><small>Observaciones</small><strong>${p.notes}</strong></div>`:''}</div>`;
+}
+function renderWoundHistory(visits){
+ const sorted=visits.slice().sort((a,b)=>new Date(a.date)-new Date(b.date));renderWoundChart(sorted);
+ const desc=sorted.slice().reverse();$('woundHistoryList').innerHTML=desc.length?desc.map(v=>`<div class="task-card visit-card"><div class="task-top"><div><div class="task-title">Visita ${v.visitNumber||''} · ${v.date||'—'}</div><div class="task-meta">${v.length||'—'} × ${v.width||'—'} cm · ${v.surface||'—'} cm²<br>Dolor: ${v.pain===''?'—':v.pain} · ${v.dressing||'Sin apósito cargado'}</div></div><span class="pill evolution ${String(v.evolution).toLowerCase()}">${v.evolution||'—'}</span></div>${v.notes?`<div class="note-box">${v.notes}</div>`:''}<div class="photo-links">${v.photoBefore?`<a href="${v.photoBefore}" target="_blank">Foto antes</a>`:''}${v.photoAfter?`<a href="${v.photoAfter}" target="_blank">Foto después</a>`:''}</div></div>`).join(''):'<div class="empty">Todavía no hay visitas registradas.</div>';
+}
+function renderWoundChart(visits){
+ const pts=visits.filter(v=>Number(v.surface)>0);if(pts.length<2){$('woundChart').innerHTML='<div class="muted chart-empty">El gráfico aparecerá cuando haya al menos 2 visitas con medidas.</div>';return}
+ const W=520,H=180,pad=28,max=Math.max(...pts.map(v=>Number(v.surface))),min=Math.min(...pts.map(v=>Number(v.surface))),range=Math.max(1,max-min);
+ const coords=pts.map((v,i)=>{const x=pad+i*(W-2*pad)/(pts.length-1);const y=H-pad-((Number(v.surface)-min)/range)*(H-2*pad);return{x,y,v}});
+ const line=coords.map(c=>`${c.x},${c.y}`).join(' ');$('woundChart').innerHTML=`<div class="chart-title">Evolución de superficie (cm²)</div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Evolución de la superficie de la herida"><line x1="${pad}" y1="${H-pad}" x2="${W-pad}" y2="${H-pad}" class="axis"/><polyline points="${line}" class="trend"/>${coords.map(c=>`<circle cx="${c.x}" cy="${c.y}" r="5" class="point"><title>Visita ${c.v.visitNumber}: ${c.v.surface} cm²</title></circle>`).join('')}</svg><div class="chart-foot"><span>${pts[0].surface} cm²</span><span>${pts[pts.length-1].surface} cm²</span></div>`;
+}
+function openNewWoundVisit(){
+ const p=currentWoundPatient;if(!p)return;show('woundVisitForm');$('woundVisitPatient').innerHTML=`<h3>${p.name}</h3><div class="muted">${p.id} · ${p.woundType||''}</div><div class="auth-line ${authClass(p.authStatus)}">${p.authStatus||''} · ${p.visitsRemaining??'—'} restantes</div>`;
+ const now=new Date(),off=now.getTimezoneOffset();$('wvDate').value=new Date(now-off*60000).toISOString().slice(0,16);
+ ['wvLength','wvWidth','wvPain','wvDressing','wvNotes'].forEach(id=>$(id).value='');['wvDepth','wvTissue','wvExudate','wvSmell'].forEach(id=>$(id).value='');$('wvPhotoBefore').value='';$('wvPhotoAfter').value='';$('wvBeforePreview').classList.add('hidden');$('wvAfterPreview').classList.add('hidden');
+ const days=frequencyDays(p.frequency);if(days){const d=new Date();d.setDate(d.getDate()+days);$('wvNext').value=d.toISOString().slice(0,10)}else $('wvNext').value='';
+ $('woundSaveStatus').classList.add('hidden');
+}
+function frequencyDays(f){f=String(f||'').toLowerCase();if(f.includes('diaria'))return 1;if(f.includes('48'))return 2;if(f.includes('semanal'))return 7;if(f.includes('quincenal'))return 14;return 0}
+function previewWoundPhoto(e,id){const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{$(id).src=rd.result;$(id).classList.remove('hidden')};rd.readAsDataURL(f)}
+async function fileDataUrl(file){if(!file)return'';const raw=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file)});return compressDataUrl(raw,1280,.78)}
+function compressDataUrl(src,max=1280,q=.78){return new Promise(res=>{const im=new Image();im.onload=()=>{let w=im.width,h=im.height;if(Math.max(w,h)>max){const k=max/Math.max(w,h);w=Math.round(w*k);h=Math.round(h*k)}const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(im,0,0,w,h);res(c.toDataURL('image/jpeg',q))};im.src=src})}
+async function saveWoundVisit(){
+ const length=Number($('wvLength').value),width=Number($('wvWidth').value),date=$('wvDate').value;if(!date||!length||!width){alert('Completá fecha, largo y ancho.');return}
+ const btn=$('saveWoundVisit');btn.disabled=true;btn.textContent='GUARDANDO…';
+ try{const visit={id:'VIS-APP-'+Date.now(),patientId:currentWoundPatient.id,date,length,width,depth:$('wvDepth').value,tissue:$('wvTissue').value,exudate:$('wvExudate').value,smell:$('wvSmell').value,pain:$('wvPain').value,dressing:$('wvDressing').value.trim(),notes:$('wvNotes').value.trim(),nextVisit:$('wvNext').value,photoBefore:await fileDataUrl($('wvPhotoBefore').files[0]),photoAfter:await fileDataUrl($('wvPhotoAfter').files[0])};
+ if(!navigator.onLine||!API.configured){let q=await idbGet(STORES.kv,'woundQueueV8')||[];q.push(visit);await idbSet(STORES.kv,'woundQueueV8',q);$('woundSaveStatus').textContent='Visita guardada sin conexión. Se enviará al recuperar Internet.';$('woundSaveStatus').classList.remove('hidden');setTimeout(()=>show('woundPatientDetail'),900);return}
+ await API.createWoundVisit(session.userId||session.id,visit);await sync();await openWoundPatient(currentWoundPatient.id);
+ }catch(e){alert('No se pudo guardar la visita: '+e.message)}finally{btn.disabled=false;btn.textContent='GUARDAR VISITA'}
+}
+async function flushWoundQueue(){if(!navigator.onLine||!API.configured)return;let q=await idbGet(STORES.kv,'woundQueueV8')||[];if(!q.length)return;const left=[];for(const v of q){try{await API.createWoundVisit(session.userId||session.id,v)}catch(e){left.push(v)}}await idbSet(STORES.kv,'woundQueueV8',left)}
+
 function show(name){
  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));$(name).classList.add('active');
  document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('active',n.dataset.go===name));
- if(name==='assigned')renderAssigned();if(name==='myDeliveries')renderMyDeliveries();if(name==='otherDelivery')prepareOther();if(name==='records')prepareRecords();
+ if(name==='assigned')renderAssigned();if(name==='myDeliveries')renderMyDeliveries();if(name==='otherDelivery')prepareOther();if(name==='records')prepareRecords();if(name==='woundPatients')renderWoundPatients();
 }
 document.addEventListener('DOMContentLoaded',init);

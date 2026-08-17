@@ -1,14 +1,19 @@
 
 const CORE_ID = '1B4CA6eYG8Eo0iw5Jirqbtysel9nFAlp293rJITnFJiM';
 const DELIVERY_ID = '18qKIsPQ3ltFuuLewgfDKwKlw9HvOsvK0jvUMHxD0ZfM';
+const WOUND_ID = '13xHsUa9mKbVJUGW8Nv5f-hkfocwURz8GTz8q5-Du_yo';
 const TZ = 'America/Argentina/Buenos_Aires';
 const USERS_SHEET = 'Usuarios';
 const PERMS_SHEET = 'Permisos';
 const DELIVERIES_SHEET = 'Entregas';
 const REMITO_FOLDER = 'Biomedical — Remitos App';
+const WOUND_PATIENTS_SHEET = 'PACIENTES';
+const WOUND_VISITS_SHEET = 'VISITAS';
+const WOUND_NURSES_SHEET = 'ENFERMEROS';
+const WOUND_FOLDER = 'Biomedical — Fotos Heridas App';
 
 function doGet() {
-  return json_({ok:true, service:'Biomedical API', version:'V7-integration'});
+  return json_({ok:true, service:'Biomedical API', version:'V8-wounds'});
 }
 function doPost(e) {
   try {
@@ -19,6 +24,9 @@ function doPost(e) {
     if (action === 'searchDeliveries') return json_(searchDeliveries_(p));
     if (action === 'updateDelivery') return json_(updateDelivery_(p));
     if (action === 'uploadRemito') return json_(uploadRemito_(p));
+    if (action === 'listWoundPatients') return json_(listWoundPatients_(p));
+    if (action === 'woundHistory') return json_(woundHistory_(p));
+    if (action === 'createWoundVisit') return json_(createWoundVisit_(p));
     return json_({ok:false,error:'Acción desconocida'});
   } catch(err) {
     return json_({ok:false,error:String(err && err.message || err)});
@@ -111,4 +119,92 @@ function uploadRemito_(p){
   let it=DriveApp.getFoldersByName(REMITO_FOLDER), folder=it.hasNext()?it.next():DriveApp.createFolder(REMITO_FOLDER);
   const file=folder.createFile(blob); file.setDescription(`Remito ${p.id} subido por ${u['Nombre']}`);
   return {ok:true,url:file.getUrl()};
+}
+
+
+// ==================== CUIDADO DE HERIDAS V8 ====================
+function norm_(v){
+  return String(v||'').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
+}
+function nurseNameForUser_(u){
+  const d=rows_(WOUND_ID,WOUND_NURSES_SHEET);
+  let n=d.rows.find(r=>String(r['USUARIO_CORE']||'').trim()===String(u['Usuario ID']).trim());
+  if(n) return n['NOMBRE_ENFERMERO'];
+  n=d.rows.find(r=>norm_(r['NOMBRE_ENFERMERO'])===norm_(u['Nombre']));
+  return n ? n['NOMBRE_ENFERMERO'] : '';
+}
+function mapWoundPatient_(r){
+  return {
+    id:r['ID_PACIENTE'], name:r['NOMBRE'], dni:r['DNI'], phone:r['TELEFONO'], address:r['DIRECCION'],
+    insurance:r['OBRA_SOCIAL'], doctor:r['MEDICO_TRATANTE'], nurse:r['ENFERMERO_RESPONSABLE'],
+    woundType:r['TIPO_HERIDA'], frequency:r['FRECUENCIA_CURACION'], authorized:Number(r['VISITAS_AUTORIZADAS']||0),
+    startDate:r['FECHA_INICIO'], expiryDate:r['FECHA_VENCIMIENTO'], treatmentStatus:r['ESTADO_TRATAMIENTO'],
+    notes:r['OBSERVACIONES'], visitsDone:Number(r['VISITAS_REALIZADAS']||0), visitsRemaining:Number(r['VISITAS_RESTANTES']||0),
+    authStatus:r['ESTADO_AUTORIZACION']||''
+  };
+}
+function canAccessPatient_(u,patient){
+  if(isSuper_(u)) return true;
+  const nurse=nurseNameForUser_(u);
+  return nurse && norm_(patient.nurse)===norm_(nurse);
+}
+function listWoundPatients_(p){
+  const u=requireUser_(p.userId);
+  const all=rows_(WOUND_ID,WOUND_PATIENTS_SHEET).rows.map(mapWoundPatient_).filter(x=>x.id&&x.name);
+  const visible=isSuper_(u)?all:all.filter(x=>canAccessPatient_(u,x));
+  return {ok:true,patients:visible};
+}
+function mapWoundVisit_(r){
+  return {
+    id:r['ID_VISITA'], patientId:r['ID_PACIENTE'], date:r['FECHA_VISITA'], nurse:r['ENFERMERO'],
+    length:Number(r['LARGO_CM']||0), width:Number(r['ANCHO_CM']||0), surface:Number(r['SUPERFICIE_CM2']||0),
+    depth:r['PROFUNDIDAD'], tissue:r['TEJIDO'], exudate:r['EXUDADO'], smell:r['OLOR'], pain:r['DOLOR_0_10'],
+    dressing:r['APOSITO'], notes:r['OBSERVACIONES'], photoBefore:r['FOTO_ANTES'], photoAfter:r['FOTO_DESPUES'],
+    nextVisit:r['PROXIMA_VISITA'], visitNumber:Number(r['NUMERO_VISITA']||0), evolution:r['EVOLUCION'], origin:r['ORIGEN']
+  };
+}
+function woundHistory_(p){
+  const u=requireUser_(p.userId);
+  const patient=rows_(WOUND_ID,WOUND_PATIENTS_SHEET).rows.map(mapWoundPatient_).find(x=>x.id===p.patientId);
+  if(!patient) throw new Error('Paciente no encontrado');
+  if(!canAccessPatient_(u,patient)) throw new Error('Sin permiso para este paciente');
+  const visits=rows_(WOUND_ID,WOUND_VISITS_SHEET).rows.map(mapWoundVisit_).filter(v=>v.patientId===p.patientId);
+  return {ok:true,patient,visits};
+}
+function saveWoundPhoto_(dataUrl,patientId,label,visitId){
+  if(!dataUrl) return '';
+  const m=String(dataUrl).match(/^data:(image\/[^;]+);base64,(.+)$/); if(!m) throw new Error('Imagen inválida');
+  const bytes=Utilities.base64Decode(m[2]);
+  let it=DriveApp.getFoldersByName(WOUND_FOLDER), root=it.hasNext()?it.next():DriveApp.createFolder(WOUND_FOLDER);
+  let pit=root.getFoldersByName(patientId), folder=pit.hasNext()?pit.next():root.createFolder(patientId);
+  const blob=Utilities.newBlob(bytes,m[1],`${visitId}-${label}.jpg`);
+  return folder.createFile(blob).getUrl();
+}
+function createWoundVisit_(p){
+  const u=requireUser_(p.userId), v=p.visit||{};
+  const d=rows_(WOUND_ID,WOUND_PATIENTS_SHEET);
+  const patient=d.rows.map(mapWoundPatient_).find(x=>x.id===v.patientId);
+  if(!patient) throw new Error('Paciente no encontrado');
+  if(!canAccessPatient_(u,patient)) throw new Error('Sin permiso para este paciente');
+  if(!v.length || !v.width || !v.date) throw new Error('Faltan fecha o medidas de la herida');
+  const visitsData=rows_(WOUND_ID,WOUND_VISITS_SHEET);
+  const previous=visitsData.rows.map(mapWoundVisit_).filter(x=>x.patientId===v.patientId).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  const visitNumber=previous.length+1, surface=Number(v.length)*Number(v.width), prev=previous.length?previous[previous.length-1].surface:0;
+  const evolution=!previous.length||!prev?'PRIMER REGISTRO':surface<prev?'MEJORA':surface>prev?'EMPEORA':'IGUAL';
+  const id=v.id||('VIS-APP-'+Utilities.getUuid().slice(0,12).toUpperCase());
+  const before=saveWoundPhoto_(v.photoBefore,v.patientId,'ANTES',id);
+  const after=saveWoundPhoto_(v.photoAfter,v.patientId,'DESPUES',id);
+  const now=new Date();
+  const vals={
+    'ID_VISITA':id,'ID_PACIENTE':v.patientId,'FECHA_VISITA':v.date,'ENFERMERO':u['Nombre'],
+    'LARGO_CM':v.length,'ANCHO_CM':v.width,'SUPERFICIE_CM2':surface,'PROFUNDIDAD':v.depth||'',
+    'TEJIDO':v.tissue||'','EXUDADO':v.exudate||'','OLOR':v.smell||'','DOLOR_0_10':v.pain||'',
+    'APOSITO':v.dressing||'','OBSERVACIONES':v.notes||'','FOTO_ANTES':before,'FOTO_DESPUES':after,
+    'PROXIMA_VISITA':v.nextVisit||'','NUMERO_VISITA':visitNumber,'EVOLUCION':evolution,'ORIGEN':'APP',
+    'FECHA_REGISTRO':Utilities.formatDate(now,TZ,'dd/MM/yyyy HH:mm:ss')
+  };
+  const row=visitsData.sh.getLastRow()+1;
+  visitsData.headers.forEach((h,j)=>visitsData.sh.getRange(row,j+1).setValue(vals[h]??''));
+  SpreadsheetApp.flush();
+  return {ok:true,visit:{...vals,id,patientId:v.patientId,surface,visitNumber,evolution}};
 }
