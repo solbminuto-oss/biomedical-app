@@ -45,3 +45,9 @@
 .visit-card .photo-links{display:flex;gap:8px;margin-top:10px}.visit-card .photo-links a{font-size:11px;font-weight:800;color:var(--navy);text-decoration:none;border:1px solid var(--line);padding:7px 9px;border-radius:7px}.pill.evolution.meJora,.pill.evolution.mejora{background:var(--greenbg);color:var(--green)}.pill.evolution.igual{background:var(--amberbg);color:var(--amber)}.pill.evolution.empeora{background:#fde7e7;color:var(--red)}
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.compact-photo{padding:10px;min-height:70px}.compact-photo input{font-size:11px}.compact-photo .photo-preview{max-height:180px}
 @media(max-width:430px){.form-grid{grid-template-columns:1fr}.patient-hero{flex-direction:column}.pill.auth{max-width:none!important}}
+
+/* V8 CLEAN additions */
+.notice.compact{margin:16px 0 0}.field-hint{display:block;color:var(--muted);font-size:11px;margin-top:5px}.loading{padding:34px 18px;text-align:center;color:var(--muted)}
+.sync-text strong.sync-error{color:var(--red)}
+.wound-picker-card .task-actions{display:block}.wound-picker-card .task-actions button{width:100%}
+@media (display-mode:standalone){body{overscroll-behavior-y:none}}

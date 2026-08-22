@@ -1,3 +1,3 @@
-window.BIOMEDICAL_CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbwY5feL-0NnFsTat68tCCRNFFWAqxTXR-fWsIQR0snkUDo5Zdv93UJq_dRWe6PuGzmEoQ/exec'
+window.BIOMEDICAL_CONFIG={
+  API_URL:'https://script.google.com/macros/s/AKfycbxPKee6eyvXOBy64wl_L2hMJXr07cBkvSBta33THgTLc6ZlhMzfMbHzJ62BPejE_4XEHQ/exec'
 };

@@ -1,5 +1,7 @@
-
-const DB_NAME='biomedical-core-v1',DB_VERSION=1,STORES={kv:'kv',queue:'syncQueue'};
-function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=()=>{const d=r.result;if(!d.objectStoreNames.contains(STORES.kv))d.createObjectStore(STORES.kv);if(!d.objectStoreNames.contains(STORES.queue))d.createObjectStore(STORES.queue,{keyPath:'id'});};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
-async function idbSet(s,k,v){const d=await openDB();return new Promise((res,rej)=>{const t=d.transaction(s,'readwrite');t.objectStore(s).put(v,k);t.oncomplete=()=>res();t.onerror=()=>rej(t.error);});}
-async function idbGet(s,k){const d=await openDB();return new Promise((res,rej)=>{const t=d.transaction(s,'readonly'),r=t.objectStore(s).get(k);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
+const DB_NAME='biomedical-v8-clean';
+const DB_VERSION=1;
+const STORES={kv:'kv'};
+function openDB(){return new Promise((resolve,reject)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=()=>{const d=r.result;if(!d.objectStoreNames.contains(STORES.kv))d.createObjectStore(STORES.kv)};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
+async function idbSet(store,key,value){const d=await openDB();return new Promise((resolve,reject)=>{const t=d.transaction(store,'readwrite');t.objectStore(store).put(value,key);t.oncomplete=()=>resolve();t.onerror=()=>reject(t.error)})}
+async function idbGet(store,key){const d=await openDB();return new Promise((resolve,reject)=>{const t=d.transaction(store,'readonly');const r=t.objectStore(store).get(key);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
+async function idbDel(store,key){const d=await openDB();return new Promise((resolve,reject)=>{const t=d.transaction(store,'readwrite');t.objectStore(store).delete(key);t.oncomplete=()=>resolve();t.onerror=()=>reject(t.error)})}
