@@ -7,7 +7,7 @@ const API={
     if(!this.configured)throw new Error('API_NOT_CONFIGURED');
     const body={action,...payload};
     if(auth){if(!this.token)throw new Error('SESSION_REQUIRED');body.authToken=this.token}
-    const r=await fetch(this.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body),redirect:'follow',cache:'no-store'});
+    const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),45000);let r;try{r=await fetch(this.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body),redirect:'follow',cache:'no-store',signal:controller.signal});}catch(e){if(e.name==='AbortError')throw new Error('network timeout');throw e}finally{clearTimeout(timer)}
     if(!r.ok)throw new Error('HTTP_'+r.status);
     let data;try{data=await r.json()}catch(_){throw new Error('RESPUESTA_API_INVALIDA')}
     if(!data.ok)throw new Error(data.error||'API_ERROR');
